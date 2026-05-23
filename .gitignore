@@ -1,0 +1,22 @@
+# Raw cloned data (re-clonable via scripts/01_collect_data.py)
+data/raw/
+
+# Regenerable processed tables (rebuilt by scripts 01-02)
+data/processed/
+
+# Generated outputs
+outputs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+*.joblib
+*.pkl
+
+# Env
+.venv/
+venv/
+.DS_Store
