@@ -1,0 +1,14 @@
+# Core: ML model + tournament simulation
+numpy>=1.26
+pandas>=2.1
+scikit-learn>=1.4
+joblib>=1.3
+matplotlib>=3.8
+
+# Notebook front-end
+jupyterlab>=4.0
+ipykernel>=6.29
+
+# Optional gradient boosters (auto-detected; the pipeline runs fine without them)
+# xgboost>=2.0
+# lightgbm>=4.1
