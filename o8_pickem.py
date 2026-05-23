@@ -41,13 +41,108 @@ from o7_simulate import precompute_win_probs, fetch_all_team_stats
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
 
-CHUNK_SIZE      = 50_000   # sims per worker per round in chunked mode
+try:
+    from numba import njit as _njit, prange as _prange
+    _NUMBA = True
+except ImportError:
+    _NUMBA = False
+    log.warning("numba not found — using pure-Python simulation (install with: pip install numba)")
+
+CHUNK_SIZE      = 10_000   # sims per worker per round in chunked mode
 CHUNK_THRESHOLD = 200_000  # auto-switch to chunked path above this
 _COMBO_BATCH    = 500      # combos to evaluate per numpy call in _accumulate_scores
 
 
 # ---------------------------------------------------------------------------
-# Swiss simulation that returns per-team records
+# Numba-compiled Swiss simulation (10-50x faster than pure Python)
+# cache=True writes the compiled code to __pycache__ so worker processes
+# load it instantly instead of recompiling on every spawn.
+# ---------------------------------------------------------------------------
+
+if _NUMBA:
+    @_njit(cache=True)
+    def _swiss_numba(wp_matrix, n, target=3):
+        wins    = np.zeros(n, dtype=np.int32)
+        losses  = np.zeros(n, dtype=np.int32)
+        active  = np.zeros(n, dtype=np.int32)
+        records = np.zeros(n, dtype=np.int32)
+        while True:
+            m = 0
+            for i in range(n):
+                if wins[i] < target and losses[i] < target:
+                    active[m]  = i
+                    records[m] = wins[i] - losses[i]
+                    m += 1
+            if m < 2:
+                break
+            # insertion sort descending by record
+            for p in range(1, m):
+                kr = records[p]; ka = active[p]
+                q  = p - 1
+                while q >= 0 and records[q] < kr:
+                    records[q + 1] = records[q]
+                    active[q + 1]  = active[q]
+                    q -= 1
+                records[q + 1] = kr
+                active[q + 1]  = ka
+            for k in range(0, m - 1, 2):
+                a = active[k]; b = active[k + 1]
+                if np.random.random() < wp_matrix[a, b]:
+                    wins[a] += 1;   losses[b] += 1
+                else:
+                    wins[b] += 1;   losses[a] += 1
+        return wins, losses
+
+    @_njit(cache=True)
+    def _chunk_numba(wp_matrix, n, chunk_size, seed):
+        np.random.seed(seed)
+        tz  = np.zeros((chunk_size, n), dtype=np.bool_)
+        adv = np.zeros((chunk_size, n), dtype=np.bool_)
+        oz  = np.zeros((chunk_size, n), dtype=np.bool_)
+        for s in range(chunk_size):
+            wins, losses = _swiss_numba(wp_matrix, n)
+            for i in range(n):
+                w = wins[i]; l = losses[i]
+                if w == 3 and l == 0:
+                    tz[s, i] = True; adv[s, i] = True
+                elif w == 3:
+                    adv[s, i] = True
+                elif l == 3 and w == 0:
+                    oz[s, i] = True
+        return tz, adv, oz
+
+    @_njit(cache=True, parallel=True)
+    def _accumulate_numba(tz, adv, oz, i30_arr, iadv_arr, i03_arr, score_hists):
+        """
+        JIT-compiled, parallel accumulation of per-combo score histograms.
+
+        Parallelises over combos (prange) — each combo owns a unique row in
+        score_hists so there are no write conflicts between threads.
+        No intermediate arrays: each sim/combo pair resolves to a single
+        histogram bucket increment.
+        """
+        n_sims   = tz.shape[0]
+        n_combos = i30_arr.shape[0]
+        k30      = i30_arr.shape[1]
+        kadv     = iadv_arr.shape[1]
+        k03      = i03_arr.shape[1]
+        for c in _prange(n_combos):
+            for s in range(n_sims):
+                score = np.int64(0)
+                for k in range(k30):
+                    if tz[s, i30_arr[c, k]]:
+                        score += 1
+                for k in range(kadv):
+                    if adv[s, iadv_arr[c, k]]:
+                        score += 1
+                for k in range(k03):
+                    if oz[s, i03_arr[c, k]]:
+                        score += 1
+                score_hists[c, score] += 1
+
+
+# ---------------------------------------------------------------------------
+# Swiss simulation that returns per-team records (Python fallback)
 # ---------------------------------------------------------------------------
 
 def _simulate_swiss_records(
@@ -79,8 +174,17 @@ def _simulate_swiss_records(
 
 def _run_chunk(args: Tuple) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     teams, prob_cache, chunk_size, seed = args
+    n = len(teams)
+
+    if _NUMBA:
+        wp_matrix = np.empty((n, n), dtype=np.float64)
+        for i, a in enumerate(teams):
+            for j, b in enumerate(teams):
+                wp_matrix[i, j] = prob_cache.get((a, b), 0.5) if i != j else 0.5
+        return _chunk_numba(wp_matrix, n, chunk_size, seed % (2 ** 31))
+
+    # --- pure-Python fallback ---
     rng = np.random.default_rng(seed)
-    n   = len(teams)
     idx = {t: i for i, t in enumerate(teams)}
 
     def wp_fn(a: str, b: str) -> float:
@@ -162,19 +266,17 @@ def _accumulate_scores(
     i03_arr:    np.ndarray,
     score_hists: np.ndarray,
 ) -> None:
-    """
-    Vectorised: accumulate per-combo score histograms from one chunk.
+    if _NUMBA:
+        _accumulate_numba(tz, adv, oz, i30_arr, iadv_arr, i03_arr, score_hists)
+        return
 
-    Processes _COMBO_BATCH combos at a time so the (chunk x batch x k)
-    intermediate stays in the low-hundreds-of-MB range.
-    """
+    # --- pure-Python/numpy fallback ---
     n_combos = len(i30_arr)
     tz8  = tz.view(np.uint8)
     adv8 = adv.view(np.uint8)
     oz8  = oz.view(np.uint8)
     for start in range(0, n_combos, _COMBO_BATCH):
         end = min(start + _COMBO_BATCH, n_combos)
-        # shapes after indexing: (chunk, batch, k) → sum last axis → (chunk, batch)
         s = (tz8[:,  i30_arr[start:end]].sum(-1, dtype=np.uint8) +
              adv8[:, iadv_arr[start:end]].sum(-1, dtype=np.uint8) +
              oz8[:,  i03_arr[start:end]].sum(-1, dtype=np.uint8))
@@ -227,7 +329,7 @@ def run_simulations_chunked(
     tz_w, adv_w, oz_w = _run_chunk((teams, prob_cache, warmup_n, RANDOM_SEED))
 
     # --- enumerate candidate combos using warm-up marginals ---
-    top_k_30, top_k_03, top_k_adv = 8, 8, 12
+    top_k_30, top_k_03, top_k_adv = 8, 8, 10
     cand_30  = list(np.argsort(tz_w.mean(0))[::-1][:top_k_30])
     cand_03  = list(np.argsort(oz_w.mean(0))[::-1][:top_k_03])
     cand_adv = list(np.argsort(adv_w.mean(0))[::-1][:top_k_adv])
@@ -255,6 +357,7 @@ def run_simulations_chunked(
     marg_oz  = np.zeros(n, dtype=np.int64)
 
     def _absorb(tz, adv, oz):
+        nonlocal marg_tz, marg_adv, marg_oz
         marg_tz  += tz.sum(0)
         marg_adv += adv.sum(0)
         marg_oz  += oz.sum(0)
@@ -264,15 +367,19 @@ def run_simulations_chunked(
     del tz_w, adv_w, oz_w
 
     # --- main loop: process remaining sims in parallel chunks ---
+    import time
     remaining      = n_sims - warmup_n
     processed      = warmup_n
     chunk_seed     = RANDOM_SEED + 1
     stable_count   = 0
     prev_best_idx  = -1
     prev_p5        = -1.0
+    t_start        = time.time()
+    round_num      = 0
 
     with mp.Pool(processes=n_workers) as pool:
         while remaining > 0:
+            round_num += 1
             batch_n = min(chunk_size * n_workers, remaining)
             base    = batch_n // n_workers
             extra   = batch_n  % n_workers
@@ -281,11 +388,28 @@ def run_simulations_chunked(
                        for i in range(n_workers)]
             chunk_seed += n_workers
 
-            for tz_c, adv_c, oz_c in pool.map(_run_chunk, args):
+            log.info("Round %d | simulating %d sims on %d workers...",
+                     round_num, batch_n, n_workers)
+            t_sim = time.time()
+            results = pool.map(_run_chunk, args)
+            log.info("  ...sims done in %.1fs | accumulating %d combos...",
+                     time.time() - t_sim, n_combos)
+
+            t_acc = time.time()
+            for tz_c, adv_c, oz_c in results:
                 _absorb(tz_c, adv_c, oz_c)
+            log.info("  ...accumulation done in %.1fs", time.time() - t_acc)
 
             processed += batch_n
             remaining -= batch_n
+
+            elapsed = time.time() - t_start
+            rate    = processed / elapsed if elapsed > 0 else 1
+            eta_s   = remaining / rate
+            log.info("  Progress: %d / %d sims (%.1f%%) | %.0f sims/s | ETA ~%.0fs",
+                     processed, n_sims,
+                     100.0 * processed / n_sims,
+                     rate, eta_s)
 
             # --- convergence check ---
             if converge and processed >= min_sims:
@@ -296,20 +420,18 @@ def run_simulations_chunked(
 
                 if cur_idx == prev_best_idx and delta < tol:
                     stable_count += 1
-                    log.info("  %d / %d sims | P(>=5)=%.4f | stable %d/%d (delta=%.5f)",
-                             processed, n_sims, cur_p5, stable_count, patience, delta)
+                    log.info("  Convergence: stable %d/%d | P(>=5)=%.4f | delta=%.5f",
+                             stable_count, patience, cur_p5, delta)
                     if stable_count >= patience:
                         log.info("Converged after %d sims (saved %d).",
                                  processed, n_sims - processed)
                         break
                 else:
                     stable_count = 0
-                    log.info("  %d / %d sims | P(>=5)=%.4f | not stable (delta=%.5f)",
-                             processed, n_sims, cur_p5, delta)
+                    log.info("  Convergence: not stable | P(>=5)=%.4f | delta=%.5f",
+                             cur_p5, delta)
                 prev_best_idx = cur_idx
                 prev_p5       = cur_p5
-            else:
-                log.info("  %d / %d sims processed", processed, n_sims)
 
     # divide by actual sims run (may be < n_sims if converged early)
     p30  = marg_tz  / processed

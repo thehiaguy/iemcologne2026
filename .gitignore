@@ -1,3 +1,6 @@
+# Scraper cache — too large for git (4+ GB), rebuild by running o2_scraper.py
+data/hltv_cache.db
+
 # Python
 __pycache__/
 *.pyc
