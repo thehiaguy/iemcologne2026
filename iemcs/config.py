@@ -112,6 +112,11 @@ TRAIN_ENCOUNTER_FORMAT = "bo3"
 # Shrink per-map probability toward 0.5 to curb overconfidence (0 = no shrink).
 PROB_SHRINK = 0.04
 
+# Recency weighting: down-weight older matches when fitting the learners / stacker /
+# calibrator / cross-region blend, so the model tracks the current meta rather than
+# stale 2024 form. Half-life in days; set to None to disable.
+RECENCY_HALF_LIFE_DAYS = 365
+
 # Feature columns fed to the gradient-boosted / linear base learners.
 FEATURE_COLUMNS = [
     "elo_diff",

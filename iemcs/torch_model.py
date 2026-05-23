@@ -50,30 +50,34 @@ class TorchMLPClassifier(BaseEstimator, ClassifierMixin):
         self.batch_size = batch_size
         self.seed = seed
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         if not _HAS_TORCH:
             raise ImportError("PyTorch is not installed")
         torch.manual_seed(self.seed)
         X = np.asarray(X, dtype=np.float64)
         y = np.asarray(y, dtype=np.float32)
+        sw = (np.ones(len(y), dtype=np.float32) if sample_weight is None
+              else np.asarray(sample_weight, dtype=np.float32))
         self.classes_ = np.array([0, 1])
         self.scaler_ = StandardScaler().fit(X)
         Xt = torch.tensor(self.scaler_.transform(X), dtype=torch.float32)
         yt = torch.tensor(y, dtype=torch.float32)
+        wt = torch.tensor(sw, dtype=torch.float32)
 
         self.net_ = _MLP(X.shape[1], tuple(self.hidden), self.p_drop)
         opt = torch.optim.Adam(self.net_.parameters(), lr=self.lr,
                                weight_decay=self.weight_decay)
-        loss_fn = nn.BCEWithLogitsLoss()
+        loss_fn = nn.BCEWithLogitsLoss(reduction="none")
         loader = torch.utils.data.DataLoader(
-            torch.utils.data.TensorDataset(Xt, yt),
+            torch.utils.data.TensorDataset(Xt, yt, wt),
             batch_size=self.batch_size, shuffle=True,
         )
         self.net_.train()
         for _ in range(self.epochs):
-            for xb, yb in loader:
+            for xb, yb, wb in loader:
                 opt.zero_grad()
-                loss_fn(self.net_(xb), yb).backward()
+                per = loss_fn(self.net_(xb), yb)
+                ((per * wb).sum() / wb.sum().clamp_min(1e-8)).backward()
                 opt.step()
         return self
 
