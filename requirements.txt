@@ -9,6 +9,10 @@ matplotlib>=3.8
 jupyterlab>=4.0
 ipykernel>=6.29
 
+# Deep-learning base learner (auto-detected; the ensemble runs fine without it).
+# CPU build is plenty: `pip install torch --index-url https://download.pytorch.org/whl/cpu`
+torch>=2.6
+
 # Optional gradient boosters (auto-detected; the pipeline runs fine without them)
 # xgboost>=2.0
 # lightgbm>=4.1

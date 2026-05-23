@@ -23,6 +23,7 @@ from sklearn.calibration import IsotonicRegression
 from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import TimeSeriesSplit
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
@@ -46,6 +47,12 @@ def _make_base_learners() -> dict:
             max_iter=400, learning_rate=0.05, max_depth=4,
             l2_regularization=1.0, random_state=0,
         ),
+        # Instance-based learner — a deliberately different inductive bias from the
+        # linear / tree / boosting / neural members, for ensemble diversity.
+        "knn": make_pipeline(
+            StandardScaler(),
+            KNeighborsClassifier(n_neighbors=100, weights="distance", n_jobs=-1),
+        ),
     }
     try:  # optional boosters
         from xgboost import XGBClassifier
@@ -62,6 +69,12 @@ def _make_base_learners() -> dict:
             n_estimators=400, max_depth=4, learning_rate=0.05,
             subsample=0.8, colsample_bytree=0.8, random_state=0, verbose=-1,
         )
+    except Exception:
+        pass
+    try:  # optional PyTorch neural-net member
+        from .torch_model import TorchMLPClassifier, _HAS_TORCH
+        if _HAS_TORCH:
+            learners["mlp"] = TorchMLPClassifier()
     except Exception:
         pass
     return learners
@@ -123,6 +136,8 @@ class MatchModel:
                 if ll < best_ll:
                     best_ll, best_w = ll, float(w)
         self.vrs_blend = best_w
+        self.oof_logloss_ = float(log_loss(ym, cal_oof))
+        self.oof_logloss_stack_ = float(log_loss(ym, stack_oof))
 
         # Refit base learners on all data for inference.
         for name, mdl in self.base.items():
