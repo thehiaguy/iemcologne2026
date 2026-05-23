@@ -61,7 +61,8 @@ def _pairings(active: list[_T], rnd: int) -> list[tuple[_T, _T]]:
     return pairs
 
 
-def simulate_swiss(seeded_teams, pmap, rng, all_bo3: bool = False):
+def simulate_swiss(seeded_teams, pmap, rng, all_bo3: bool = False,
+                   with_records: bool = False):
     """Run one Swiss stage.
 
     Parameters
@@ -70,8 +71,10 @@ def simulate_swiss(seeded_teams, pmap, rng, all_bo3: bool = False):
     pmap         : callable    pmap(a, b) -> per-map P(a beats b)
     rng          : np.random.Generator
     all_bo3      : bool         Stage 3 flag
+    with_records : bool         also return {team: (wins, losses)}
 
-    Returns (advanced, eliminated) as lists of names in finishing order.
+    Returns (advanced, eliminated) name lists in finishing order; if
+    `with_records`, returns (advanced, eliminated, records).
     """
     teams = {n: _T(n, i + 1) for i, n in enumerate(seeded_teams)}
     active = list(teams.values())
@@ -109,4 +112,9 @@ def simulate_swiss(seeded_teams, pmap, rng, all_bo3: bool = False):
     # Finishing order: advancers by (wins desc, buchholz desc, seed); reverse for out.
     advanced.sort(key=lambda t: (-t.w, -t.buchholz(), t.seed))
     eliminated.sort(key=lambda t: (t.l, -t.buchholz(), t.seed))
-    return [t.name for t in advanced], [t.name for t in eliminated]
+    adv_names = [t.name for t in advanced]
+    elim_names = [t.name for t in eliminated]
+    if with_records:
+        records = {t.name: (t.w, t.l) for t in advanced + eliminated}
+        return adv_names, elim_names, records
+    return adv_names, elim_names

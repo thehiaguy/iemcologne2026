@@ -49,9 +49,9 @@ Full tables, CSVs and charts land in `outputs/` (see `outputs/REPORT.md`).
 
 ## Quick start
 
-The stack is small and standard — **numpy, pandas, scikit-learn, joblib, matplotlib**
-and **JupyterLab** (all in `requirements.txt`). If your conda **base** env already has
-these (most do), just `conda activate base` and skip to the notebook below.
+The stack is small and standard — **numpy, pandas, scikit-learn, joblib, matplotlib**,
+**JupyterLab**, and an optional **PyTorch** ensemble member (all in `requirements.txt`).
+If your conda env already has these, just activate it and skip to the notebook below.
 
 Otherwise create an isolated environment. `requirements.txt` is a pip-format file, so
 install it with pip inside a conda env, or hand the file to conda directly:
@@ -110,12 +110,14 @@ features before observing the result:
   stability** (months the current lineup has been intact), **same-region** flag
 
 ### Model (the ensemble)
-Base learners (logistic regression, random forest, hist-gradient-boosting; XGBoost /
-LightGBM auto-added if installed) are stacked by a logistic meta-learner on
-**out-of-fold** predictions, then **isotonically calibrated**. Because a Major is
-mostly cross-region — where region-inflated Elo misleads — predictions for
-cross-region matchups are blended toward the VRS estimate, with the weight tuned on
-held-out cross-region matches.
+Base learners (logistic regression, random forest, hist-gradient-boosting,
+**k-nearest-neighbours**, and a **PyTorch MLP**; XGBoost / LightGBM auto-added if
+installed) are stacked by a logistic meta-learner on **out-of-fold** predictions, then
+**isotonically calibrated**. All fitting is **recency-weighted** (exponential decay,
+~1-year half-life) so the model tracks the current meta rather than stale form. Because
+a Major is mostly cross-region — where region-inflated Elo misleads — cross-region
+matchups are blended toward the VRS estimate, with the blend weight tuned
+(recency-weighted) on held-out cross-region matches.
 
 The model's native output is a (Bo3-equivalent) encounter probability; `series.py`
 inverts it to a per-map probability and recomputes **Bo1 / Bo3 / Bo5** odds for the
@@ -140,9 +142,11 @@ iemcs/            package: data, ratings, features, model, simulators, reporting
   dataset.py      leak-free chronological feature builder (Context)
   ratings.py      Elo + Glicko-2
   model.py        stacked ensemble + calibration + cross-region VRS blend
+  torch_model.py  optional PyTorch MLP base learner (auto-detected)
   series.py       Bo1/Bo3/Bo5 math + encounter<->map inversion
   swiss.py        Major Swiss engine            playoffs.py   single-elim bracket
-  tournament.py   Monte-Carlo driver + CIs      validate.py   walk-forward backtest
+  tournament.py   Monte-Carlo driver + CIs      validate.py   walk-forward backtest + model comparison
+  simbacktest.py  end-to-end backtest on real past Majors (playoff brackets)
   report.py       tables / CSV / charts / markdown
   config.py       format spec, paths, hyper-parameters    teams.py  the 32-team field
 notebooks/        end-to-end notebook           tests/        pytest suite
