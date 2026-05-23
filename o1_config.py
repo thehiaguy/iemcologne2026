@@ -112,10 +112,14 @@ STAGE2_TEAMS: List[str] = [
 ]
 
 STAGE1_TEAMS: List[str] = [
-    "GamerLegion", "BetBoom", "HEROIC", "M80",
-    "Sharks", "MIBR", "TYLOO", "THUNDER dOWNUNDER",
-    "BIG", "B8", "SINNERS", "NRG",
-    "Gaimin Gladiators", "Liquid", "Lynn Vision", "FlyQuest",
+    "GamerLegion", "NRG",
+    "B8", "TYLOO",
+    "HEROIC", "Sharks",
+    "BetBoom", "Gaimin Gladiators",
+    "BIG", "Liquid",
+    "M80", "Lynn Vision",
+    "MIBR", "THUNDER dOWNUNDER",
+    "SINNERS", "FlyQuest",
 ]
 
 ALL_TEAMS: List[str] = STAGE3_TEAMS + STAGE2_TEAMS + STAGE1_TEAMS
