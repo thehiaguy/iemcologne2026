@@ -1,0 +1,18 @@
+# Data & model artifacts
+data/
+models/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Claude internal
+.claude/

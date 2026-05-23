@@ -1,0 +1,30 @@
+# Core ML + data
+numpy>=1.26.0
+pandas>=2.2.0
+scikit-learn>=1.4.0
+xgboost>=2.0.0
+pyarrow>=14.0.0
+tqdm>=4.66.0
+
+# PyTorch with CUDA 12.8 (compatible with CUDA 13.x drivers)
+# Install separately:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+torch>=2.6.0
+torchvision>=0.21.0
+
+# HLTV data — hltv-async-api (requires lxml, install binary-only on Python 3.14+)
+#   pip install lxml --only-binary :all:
+#   pip install hltv-async-api --no-deps
+hltv-async-api==0.8.3
+aiohttp>=3.0.1
+beautifulsoup4>=4.0.1
+lxml>=6.0.0
+pytz
+
+# Selenium scraper (bypasses Cloudflare)
+selenium>=4.0.0
+undetected-chromedriver>=3.5.0
+openpyxl>=3.0.0
+
+# HTTP client (eupeutro API)
+requests>=2.31.0
