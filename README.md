@@ -7,7 +7,7 @@ playoff advancement (quarter-/semi-/final), and the champion.
 The match model is a **stacked, calibrated ensemble** (Elo + Glicko-2 + Valve
 Regional Standings + gradient-boosting/logistic/forest base learners) trained on
 **CS2-only** results. A faithful Major-format **Monte-Carlo** then plays the bracket
-50,000 times to turn per-match odds into per-team advancement probabilities.
+10,000,000 times to turn per-match odds into per-team advancement probabilities.
 
 > **Note on the favourite.** The model is trained on 2024–2026 CS2 results, in which
 > **Vitality** were historically dominant — so they emerge as a heavy title favourite.
@@ -16,7 +16,7 @@ Regional Standings + gradient-boosting/logistic/forest base learners) trained on
 
 ---
 
-## Results (50,000 simulations)
+## Results (10,000,000 simulations)
 
 Out-of-sample walk-forward backtest (CS2 history):
 
@@ -34,14 +34,14 @@ Predicted title odds (top 8):
 
 | Team | Champion | Reach Final | Reach Playoffs |
 | :- | -: | -: | -: |
-| Vitality | 64.2% | 71.4% | 98.1% |
-| Falcons | 7.9% | 22.4% | 78.2% |
-| Natus Vincere | 6.2% | 19.4% | 75.1% |
-| The MongolZ | 4.0% | 13.6% | 65.4% |
-| Spirit | 3.8% | 12.8% | 52.6% |
-| FURIA | 3.7% | 13.1% | 64.3% |
-| Aurora | 2.2% | 9.7% | 58.0% |
-| PARIVISION | 2.0% | 9.1% | 56.7% |
+| Vitality | 64.2% | 71.4% | 98.0% |
+| Falcons | 8.1% | 22.3% | 78.3% |
+| Natus Vincere | 6.2% | 19.7% | 75.1% |
+| The MongolZ | 3.9% | 13.5% | 65.4% |
+| Spirit | 3.8% | 12.8% | 52.9% |
+| FURIA | 3.8% | 13.0% | 63.9% |
+| Aurora | 2.3% | 9.8% | 58.2% |
+| PARIVISION | 2.0% | 9.0% | 56.4% |
 
 Full tables, CSVs and charts land in `outputs/` (see `outputs/REPORT.md`).
 
@@ -129,7 +129,7 @@ exact format each match uses.
   **Buchholz**, high-vs-low, avoiding rematches. Bo1 except advancement/elimination
   matches are Bo3; **Stage 3 is all Bo3**.
 * **8-team single-elimination playoffs** — Bo3, **Bo5 grand final**.
-* 50,000 runs (parallel) aggregate each team's probability of clearing every stage
+* 10,000,000 runs (parallel) aggregate each team's probability of clearing every stage
   and winning, with 95% Monte-Carlo confidence intervals.
 
 ---
