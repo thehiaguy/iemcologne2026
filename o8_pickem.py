@@ -355,6 +355,7 @@ def run_simulations_chunked(
     marg_tz  = np.zeros(n, dtype=np.int64)
     marg_adv = np.zeros(n, dtype=np.int64)
     marg_oz  = np.zeros(n, dtype=np.int64)
+    convergence_history = []
 
     def _absorb(tz, adv, oz):
         nonlocal marg_tz, marg_adv, marg_oz
@@ -365,6 +366,18 @@ def run_simulations_chunked(
 
     _absorb(tz_w, adv_w, oz_w)
     del tz_w, adv_w, oz_w
+
+    # warm-up snapshot
+    p5_wu  = score_hists[:, 5:].sum(1) / warmup_n
+    wu_idx = int(p5_wu.argmax())
+    wu_i30, wu_iadv, wu_i03 = combos[wu_idx]
+    convergence_history.append({
+        "sims":      warmup_n,
+        "best_p5":   float(p5_wu[wu_idx]),
+        "picks_30":  tuple(teams[i] for i in wu_i30),
+        "picks_adv": tuple(teams[i] for i in wu_iadv),
+        "picks_03":  tuple(teams[i] for i in wu_i03),
+    })
 
     # --- main loop: process remaining sims in parallel chunks ---
     import time
@@ -411,12 +424,22 @@ def run_simulations_chunked(
                      100.0 * processed / n_sims,
                      rate, eta_s)
 
+            # --- current best (always, for history + convergence) ---
+            p5_all  = score_hists[:, 5:].sum(1) / processed
+            cur_idx = int(p5_all.argmax())
+            cur_p5  = float(p5_all[cur_idx])
+            snap_i30, snap_iadv, snap_i03 = combos[cur_idx]
+            convergence_history.append({
+                "sims":      processed,
+                "best_p5":   cur_p5,
+                "picks_30":  tuple(teams[i] for i in snap_i30),
+                "picks_adv": tuple(teams[i] for i in snap_iadv),
+                "picks_03":  tuple(teams[i] for i in snap_i03),
+            })
+
             # --- convergence check ---
             if converge and processed >= min_sims:
-                p5_all  = score_hists[:, 5:].sum(1) / processed
-                cur_idx = int(p5_all.argmax())
-                cur_p5  = float(p5_all[cur_idx])
-                delta   = abs(cur_p5 - prev_p5)
+                delta = abs(cur_p5 - prev_p5)
 
                 if cur_idx == prev_best_idx and delta < tol:
                     stable_count += 1
@@ -438,7 +461,7 @@ def run_simulations_chunked(
     padv = marg_adv / processed
     p03  = marg_oz  / processed
 
-    return p30, padv, p03, combos, score_hists
+    return p30, padv, p03, combos, score_hists, convergence_history
 
 
 # ---------------------------------------------------------------------------
@@ -616,7 +639,7 @@ def main():
 
     if args.n_sims > CHUNK_THRESHOLD:
         log.info("Chunked mode: RAM stays bounded regardless of sim count.")
-        p30, padv, p03, combos, score_hists = run_simulations_chunked(
+        p30, padv, p03, combos, score_hists, _ = run_simulations_chunked(
             teams, prob_cache, args.n_sims,
             n_workers=args.n_workers, chunk_size=args.chunk_size,
             converge=not args.no_converge, tol=args.tol,

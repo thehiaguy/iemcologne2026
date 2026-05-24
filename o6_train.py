@@ -189,7 +189,8 @@ def main():
     input_dim = X_tr_s.shape[1]
 
     # --- 4 & 5. Train models ---
-    pt_model,  pt_auc  = train_pytorch(X_tr_s, y_tr, X_va_s, y_va, input_dim)
+    pt_model,  pt_auc  = train_pytorch(X_tr_s, y_tr, X_va_s, y_va, input_dim,
+                                        history_path=DATA_DIR / "training_history.csv")
     xgb_model, xgb_auc = train_xgboost(X_tr_s, y_tr, X_va_s, y_va)
 
     # --- 6. Ensemble blend ---

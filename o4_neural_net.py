@@ -100,6 +100,7 @@ def train_pytorch(
     X_tr: np.ndarray, y_tr: np.ndarray,
     X_va: np.ndarray, y_va: np.ndarray,
     input_dim: int,
+    history_path=None,
 ) -> Tuple[MatchPredictor, float]:
     """Train MatchPredictor and return (cpu model, best_val_auc)."""
     log.info("Training PyTorch ResNet MLP on %s  (input_dim=%d)", DEVICE, input_dim)
@@ -132,28 +133,41 @@ def train_pytorch(
     )
 
     best_auc, best_state, patience = 0.0, None, 0
+    _history = []
 
     for epoch in range(PT_EPOCHS):
         model.train()
+        epoch_loss, n_batches = 0.0, 0
         for xb, yb in train_dl:
             xb = xb.to(DEVICE, non_blocking=True)
             yb = yb.to(DEVICE, non_blocking=True)
             optimizer.zero_grad()
             with torch.autocast(device_type=DEVICE.type, enabled=amp_on):
                 loss = criterion(model(xb), yb)
+            epoch_loss += loss.item()
+            n_batches  += 1
             scaler_g.scale(loss).backward()
             scaler_g.unscale_(optimizer)
             nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             scaler_g.step(optimizer)
             scaler_g.update()
         scheduler.step()
+        train_loss = epoch_loss / max(n_batches, 1)
 
         model.eval()
         with torch.no_grad():
-            val_logits = model(torch.FloatTensor(X_va).to(DEVICE))
+            X_va_t     = torch.FloatTensor(X_va).to(DEVICE)
+            y_va_t     = torch.FloatTensor(y_va).to(DEVICE)
+            val_logits = model(X_va_t)
+            val_loss   = criterion(val_logits, y_va_t).item()
             val_probs  = torch.sigmoid(val_logits).cpu().numpy()
 
         val_auc = roc_auc_score(y_va, val_probs) if len(set(y_va)) > 1 else 0.0
+        _history.append({
+            "epoch": epoch, "train_loss": train_loss,
+            "val_loss": val_loss, "val_auc": val_auc,
+            "lr": optimizer.param_groups[0]["lr"],
+        })
 
         if val_auc > best_auc:
             best_auc   = val_auc
@@ -172,6 +186,12 @@ def train_pytorch(
     if best_state:
         model.load_state_dict(best_state)
     log.info("PyTorch best val AUC: %.4f", best_auc)
+
+    if history_path is not None:
+        import pandas as pd
+        pd.DataFrame(_history).to_csv(history_path, index=False)
+        log.info("Training history saved to %s", history_path)
+
     return model.cpu(), best_auc
 
 
