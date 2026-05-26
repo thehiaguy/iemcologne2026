@@ -1,8 +1,5 @@
-# Raw cloned data (re-clonable via scripts/01_collect_data.py)
+# Valve Repo
 data/raw/
-
-# Regenerable processed tables (rebuilt by scripts 01-02)
-data/processed/
 
 # Generated outputs
 outputs/

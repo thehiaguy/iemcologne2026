@@ -72,7 +72,7 @@ PLAYOFF_FINAL_BO5 = True    # grand final is Bo5, all other rounds Bo3
 # --------------------------------------------------------------------------- #
 # Simulation
 # --------------------------------------------------------------------------- #
-N_SIMS = 50_000
+N_SIMS = 10_000_000
 RANDOM_SEED = 42
 N_JOBS = -1                 # joblib parallelism for the Monte-Carlo
 BOOTSTRAP_CI = 0.95         # confidence level for reported intervals
