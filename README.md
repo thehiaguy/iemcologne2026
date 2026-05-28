@@ -6,7 +6,7 @@ playoff advancement (quarter-/semi-/final), and the champion.
 
 The match model is a **stacked, calibrated ensemble** (Elo + Glicko-2 + Valve
 Regional Standings + gradient-boosting/logistic/forest base learners) trained on
-**CS2-only** results. A faithful Major-format **Monte-Carlo** then plays the bracket
+**CS2-only** results. A Major-format **Monte-Carlo** then plays the bracket
 10,000,000 times to turn per-match odds into per-team advancement probabilities.
 
 > **Note on the favourite.** The model is trained on 2024–2026 CS2 results, in which
@@ -43,7 +43,7 @@ Predicted title odds (top 8):
 | Aurora | 2.3% | 9.8% | 58.2% |
 | PARIVISION | 2.0% | 9.0% | 56.4% |
 
-Full tables, CSVs and charts land in `outputs/` (see `outputs/REPORT.md`).
+Full tables, CSVs, and charts land in `outputs/` (see `outputs/REPORT.md`).
 
 ---
 
@@ -53,20 +53,20 @@ The stack is small and standard — **numpy, pandas, scikit-learn, joblib, matpl
 **JupyterLab**, and an optional **PyTorch** ensemble member (all in `requirements.txt`).
 If your conda env already has these, just activate it and skip to the notebook below.
 
-Otherwise create an isolated environment. `requirements.txt` is a pip-format file, so
+Otherwise, create an isolated environment. `requirements.txt` is a pip-format file, so
 install it with pip inside a conda env, or hand the file to conda directly:
 
 ```bash
-# Option A — conda env, install with pip (most reliable)
+# Option A: conda env, install with pip (most reliable)
 conda create -n iemcs python=3.13 -y
 conda activate iemcs
 pip install -r requirements.txt
 
-# Option B — pure conda (reads the same file)
+# Option B: pure conda (reads the same file)
 conda create -n iemcs python=3.13 -c conda-forge --file requirements.txt
 conda activate iemcs
 
-# Option C — plain venv, no conda
+# Option C: plain venv, no conda
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -93,10 +93,10 @@ Run `pytest` for the unit tests covering the Swiss / series / simulation logic.
 ## How it works
 
 ### Data — CS2 only
-The single source of truth is Valve's official **Regional Standings** repo. Its
+We used Valve's official **Regional Standings** repo as the basis. Its
 per-team monthly "details" files list every match a roster played (date, opponent,
-W/L), which we deduplicate into **~27,000 CS2 matches (Feb 2024 → May 2026)** — zero
-CS:GO. The same repo provides VRS points, rosters and regions, and the loader
+W/L), which we deduplicate into **~27,000 CS2 matches (Feb 2024 → May 2026)**.
+The same repo provides VRS points, rosters and regions, and the loader
 (`vrs.parse_matches`) filters to the CS2 era so no pre-CS2 rows survive.
 
 ### Features (leak-free, per match)
@@ -111,7 +111,7 @@ features before observing the result:
 
 ### Model (the ensemble)
 Base learners (logistic regression, random forest, hist-gradient-boosting,
-**k-nearest-neighbours**, and a **PyTorch MLP**; XGBoost / LightGBM auto-added if
+**k-nearest-neighbours**, and a **PyTorch MLP**. XGBoost / LightGBM auto-added if
 installed) are stacked by a logistic meta-learner on **out-of-fold** predictions, then
 **isotonically calibrated**. All fitting is **recency-weighted** (exponential decay,
 ~1-year half-life) so the model tracks the current meta rather than stale form. Because
@@ -148,9 +148,12 @@ iemcs/            package: data, ratings, features, model, simulators, reporting
   tournament.py   Monte-Carlo driver + CIs      validate.py   walk-forward backtest + model comparison
   simbacktest.py  end-to-end backtest on real past Majors (playoff brackets)
   report.py       tables / CSV / charts / markdown
-  config.py       format spec, paths, hyper-parameters    teams.py  the 32-team field
-notebooks/        end-to-end notebook           tests/        pytest suite
-data/  outputs/   processed tables / predictions, charts, report
+  config.py       format spec, paths, hyper-parameters
+  teams.py  the 32-team field
+notebooks/        end-to-end notebook
+tests/            pytest suite
+data/             raw and processed data
+outputs/          processed tables / predictions, charts, report
 ```
 
 ## Assumptions & limitations
